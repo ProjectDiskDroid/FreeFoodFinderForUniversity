@@ -1,0 +1,28 @@
+name: Free Food Scraper
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Runs every day at 8am UTC
+  workflow_dispatch:  # Allows you to run it manually from GitHub too
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 python-dotenv notion-client python-dateutil
+
+      - name: Run scraper
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+        run: python scraper.py
