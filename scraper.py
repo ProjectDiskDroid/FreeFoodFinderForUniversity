@@ -59,6 +59,37 @@ def event_exists(title):
     )
     return len(response["results"]) > 0
 
+from datetime import date
+
+def remove_past_events():
+    response = notion.databases.query(
+        **{
+            "database_id": NOTION_DATABASE_ID
+        }
+    )
+
+    today = date.today()
+    removed = 0
+
+    for page in response["results"]:
+        date_prop = page["properties"].get("Date", {}).get("date")
+        if date_prop and date_prop.get("start"):
+            event_date = date.fromisoformat(date_prop["start"])
+            if event_date < today:
+                notion.pages.update(
+                    **{
+                        "page_id": page["id"],
+                        "archived": True
+                    }
+                )
+                removed += 1
+
+    if removed > 0:
+        print(f"Removed {removed} past event(s) from Notion.")
+    else:
+        print("No past events to remove.")
+
+
 def add_to_notion(event):
     if event_exists(event["title"]):
         print(f"Skipping (already exists): {event['title']}")
@@ -135,6 +166,10 @@ def scrape_events():
 
 if __name__ == "__main__":
     print("Scraping Curtin events...")
+
+    print("Checking for past events to remove...")
+    remove_past_events()
+
     events = scrape_events()
 
     if events:
