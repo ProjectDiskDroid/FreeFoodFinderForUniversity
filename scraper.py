@@ -4,6 +4,7 @@ from notion_client import Client
 from dotenv import load_dotenv
 from pathlib import Path
 from dateutil import parser as dateparser
+from datetime import date
 import os
 import urllib3
 urllib3.disable_warnings()
@@ -59,8 +60,6 @@ def event_exists(title):
     )
     return len(response["results"]) > 0
 
-from datetime import date
-
 def remove_past_events():
     response = notion.databases.query(
         **{
@@ -88,7 +87,6 @@ def remove_past_events():
         print(f"Removed {removed} past event(s) from Notion.")
     else:
         print("No past events to remove.")
-
 
 def add_to_notion(event):
     if event_exists(event["title"]):
@@ -120,47 +118,60 @@ def add_to_notion(event):
     print(f"Added to Notion: {event['title']}")
 
 def scrape_events():
-    url = "https://www.curtin.edu.au/events/"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    event_links = soup.find_all("a", href=lambda h: h and "/events/" in h)
-
     food_events = []
+    page = 1
 
-    for link in event_links:
-        title = link.find("h3")
-        if not title:
-            continue
+    while True:
+        if page == 1:
+            url = "https://www.curtin.edu.au/events/"
+        else:
+            url = f"https://www.curtin.edu.au/events/page/{page}/"
 
-        title_text = title.get_text(strip=True)
-        full_text = link.get_text(separator=" ", strip=True)
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        if has_free_food(full_text):
-            href = link["href"]
-            full_url = "https://www.curtin.edu.au" + href if href.startswith("/") else href
+        event_links = soup.find_all("a", href=lambda h: h and "/events/" in h)
 
-            paragraphs = [p.get_text(strip=True) for p in link.find_all("p") if p.get_text(strip=True)]
+        # Filter to only links that contain an h3 (actual event cards)
+        event_cards = [link for link in event_links if link.find("h3")]
 
-            date_text = paragraphs[0] if len(paragraphs) > 0 else ""
-            location_text = paragraphs[2] if len(paragraphs) > 2 else ""
+        # If no event cards found, we've gone past the last page
+        if not event_cards:
+            break
 
-            # Extract description by removing known parts from the full text
-            description_text = full_text
-            for p in paragraphs:
-                description_text = description_text.replace(p, "")
-            title_elem = link.find("h3")
-            if title_elem:
-                description_text = description_text.replace(title_elem.get_text(strip=True), "")
-            description_text = description_text.replace("Event details", "").strip()
+        print(f"Scanning page {page}...")
 
-            food_events.append({
-                "title": title_text,
-                "date": date_text,
-                "location": location_text,
-                "description": description_text,
-                "url": full_url
-            })
+        for link in event_cards:
+            title = link.find("h3")
+            title_text = title.get_text(strip=True)
+            full_text = link.get_text(separator=" ", strip=True)
+
+            if has_free_food(full_text):
+                href = link["href"]
+                full_url = "https://www.curtin.edu.au" + href if href.startswith("/") else href
+
+                paragraphs = [p.get_text(strip=True) for p in link.find_all("p") if p.get_text(strip=True)]
+
+                date_text = paragraphs[0] if len(paragraphs) > 0 else ""
+                location_text = paragraphs[2] if len(paragraphs) > 2 else ""
+
+                description_text = full_text
+                for p in paragraphs:
+                    description_text = description_text.replace(p, "")
+                title_elem = link.find("h3")
+                if title_elem:
+                    description_text = description_text.replace(title_elem.get_text(strip=True), "")
+                description_text = description_text.replace("Event details", "").strip()
+
+                food_events.append({
+                    "title": title_text,
+                    "date": date_text,
+                    "location": location_text,
+                    "description": description_text,
+                    "url": full_url
+                })
+
+        page += 1
 
     return food_events
 
